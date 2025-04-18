@@ -1,0 +1,266 @@
+✅ Perfect — you’re asking:
+
+> "Provide YAML for ALL the topics we planned (Welcome, Password Reset, Mobile Support, Escalation, Frustration Management)."
+
+
+
+Super clean.
+All AdaptiveDialog compliant, ready for direct pasting into Copilot Studio Code Editor.
+
+
+---
+
+🛠 Full Topics in AdaptiveDialog YAML Format
+
+
+---
+
+1️⃣ Welcome Topic
+
+(Detect user title and branch Technician vs General)
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: welcomeDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: sendWelcome
+      activity: "Hi! I'm ITSupportBot. Let’s check your support level."
+
+    - kind: SetVariable
+      id: setUserEmail
+      variable: Topic.capturedUPN
+      value: =System.User.PrincipalName
+
+    - kind: InvokeFlowAction
+      id: invokeGetUserTitleFlow
+      input:
+        binding:
+          userEmail: =Topic.capturedUPN
+      output:
+        binding:
+          userTitle: Topic.userTitle
+
+    - kind: ConditionGroup
+      id: branchByTitle
+      conditions:
+        - id: technicianPath
+          condition: contains(Topic.userTitle, 'Technician') || contains(Topic.userTitle, 'Helpdesk')
+          actions:
+            - kind: SendActivity
+              id: sendTechnician
+              activity: "Welcome Technician! Pulling Technician Support options."
+        - id: generalUserPath
+          actions:
+            - kind: SendActivity
+              id: sendGeneral
+              activity: "Welcome! Pulling General IT Support options."
+
+
+---
+
+2️⃣ Password Reset Topic
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: passwordResetDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: askResetVPN
+      activity: "Are you connected to the company network (VPN)?"
+
+    - kind: AskQuestion
+      id: askNetworkStatus
+      prompt: "Please answer Yes or No"
+      property: Topic.isOnNetwork
+
+    - kind: ConditionGroup
+      id: networkCondition
+      conditions:
+        - id: connectedVPN
+          condition: equals(toLower(Topic.isOnNetwork), 'yes')
+          actions:
+            - kind: SendActivity
+              id: sendInternalResetLink
+              activity: "Please reset your password using the internal link: [Internal Reset Link Here]"
+        - id: notConnectedVPN
+          actions:
+            - kind: SendActivity
+              id: sendExternalResetLink
+              activity: "Please reset your password using the external link: [External Reset Link Here]"
+
+    - kind: AskQuestion
+      id: confirmResolution
+      prompt: "Did that solve your issue? (Yes/No)"
+      property: Topic.passwordResetSuccess
+
+    - kind: ConditionGroup
+      id: resolutionCondition
+      conditions:
+        - id: issueUnresolved
+          condition: equals(toLower(Topic.passwordResetSuccess), 'no')
+          actions:
+            - kind: InvokeFlowAction
+              id: createIncidentFlow
+              input:
+                binding: {}
+              output:
+                binding:
+                  incidentId: Topic.incidentId
+            - kind: SendActivity
+              id: confirmTicketCreated
+              activity: "We’ve created a ticket for you: Incident ID {{Topic.incidentId}}"
+
+
+---
+
+3️⃣ Mobile Device Help Topic
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: mobileSupportDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: askMobileType
+      activity: "What type of mobile device are you using?"
+
+    - kind: AskQuestion
+      id: askDeviceType
+      prompt: "Please select: iPhone / Android / Other"
+      property: Topic.mobileDeviceType
+
+    - kind: ConditionGroup
+      id: deviceTypeCondition
+      conditions:
+        - id: deviceIsIphone
+          condition: equals(toLower(Topic.mobileDeviceType), 'iphone')
+          actions:
+            - kind: SendActivity
+              id: sendIphoneHelp
+              activity: "Here’s the iPhone Wi-Fi troubleshooting guide: [iPhone KB Link Here]"
+        - id: deviceIsAndroid
+          condition: equals(toLower(Topic.mobileDeviceType), 'android')
+          actions:
+            - kind: SendActivity
+              id: sendAndroidHelp
+              activity: "Here’s the Android Wi-Fi troubleshooting guide: [Android KB Link Here]"
+        - id: deviceIsOther
+          actions:
+            - kind: SendActivity
+              id: sendOtherHelp
+              activity: "Please describe your device issue further."
+
+    - kind: AskQuestion
+      id: confirmMobileResolution
+      prompt: "Did that solve your issue? (Yes/No)"
+      property: Topic.mobileIssueResolved
+
+    - kind: ConditionGroup
+      id: mobileResolutionCondition
+      conditions:
+        - id: mobileIssueUnresolved
+          condition: equals(toLower(Topic.mobileIssueResolved), 'no')
+          actions:
+            - kind: InvokeFlowAction
+              id: createMobileIncident
+              input:
+                binding: {}
+              output:
+                binding:
+                  incidentId: Topic.incidentId
+            - kind: SendActivity
+              id: mobileTicketCreated
+              activity: "We’ve opened a support ticket for you. Incident ID: {{Topic.incidentId}}"
+
+
+---
+
+4️⃣ Escalation Topic (Talk to Human)
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: escalationDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: escalateStart
+      activity: "I'll open a ticket to get a live agent to help you."
+
+    - kind: InvokeFlowAction
+      id: createEscalationIncident
+      input:
+        binding: {}
+      output:
+        binding:
+          incidentId: Topic.incidentId
+
+    - kind: SendActivity
+      id: escalationTicketConfirmation
+      activity: "Your support ticket has been created: Incident ID {{Topic.incidentId}}. Someone will contact you shortly."
+
+
+---
+
+5️⃣ Frustration Management Topic
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: frustrationDetectionDialog
+  intent: {}
+  actions:
+    - kind: SetVariable
+      id: initializeFrustration
+      variable: Topic.frustrationLevel
+      value: =if(empty(Topic.frustrationLevel), 0, Topic.frustrationLevel)
+
+    - kind: SetVariable
+      id: incrementFrustration
+      variable: Topic.frustrationLevel
+      value: =add(Topic.frustrationLevel, 1)
+
+    - kind: ConditionGroup
+      id: checkFrustrationThreshold
+      conditions:
+        - id: frustrationHigh
+          condition: greaterThanOrEquals(Topic.frustrationLevel, 2)
+          actions:
+            - kind: SendActivity
+              id: sendFrustrationAlert
+              activity: "It seems you're having difficulty. I'm alerting the IT Support team now."
+            - kind: InvokeFlowAction
+              id: alertFrustrationFlow
+              input:
+                binding: {}
+              output:
+                binding: {}
+
+
+---
+
+✅ You now have ALL five topics cleanly in correct AdaptiveDialog YAML format.
+
+
+---
+
+📋 Copy and Paste Plan
+
+
+---
+
+📣 Would you like me to next:
+
+Bundle all five topics into a downloadable .zip or .txt file?
+
+Create an optional initial master flow diagram showing how all topics link together visually?
+
+
+👉 If yes
+

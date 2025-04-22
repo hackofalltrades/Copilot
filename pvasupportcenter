@@ -1,0 +1,100 @@
+Here’s how you can have your PVA bot hand back a link that will launch the BigFix Support Center on the user’s desktop (or fall back to the web if the app isn’t installed).  This uses an Adaptive Card “OpenUrl” button with a custom URI scheme that your BES Support Center registers on Windows.
+
+
+---
+
+1. Register the BigFix Support‑Center URI on the client
+
+(Usually done by your BigFix install—check with your BigFix admin.)
+
+Windows Registry Key:
+  HKEY_CLASSES_ROOT\besupportcenter
+  (Default) = "URL:BigFix Support Center Protocol"
+  "URL Protocol" = ""
+
+  HKEY_CLASSES_ROOT\besupportcenter\shell\open\command
+  (Default) = "\"C:\\Program Files\\BigFix Enterprise\\BES Support Center\\BESSupportCenter.exe\" \"%1\""
+
+
+---
+
+2. In your Copilot Studio topic, send an Adaptive Card with an OpenUrl button
+
+Paste this YAML into your Code editor for the topic where you want to show the solution link:
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: bigFixSolutionDialog
+  intent:
+    - show solution
+  actions:
+    - kind: SendActivity
+      id: intro
+      activity: "I found a fix in BigFix Support Center. Click below to open it on your PC:"
+
+    - kind: SendActivity
+      id: sendCard
+      activity: |
+        {
+          "type": "message",
+          "attachments": [
+            {
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "text": "Solution for “{{Topic.issueDescription}}”",
+                    "wrap": true
+                  }
+                ],
+                "actions": [
+                  {
+                    "type": "Action.OpenUrl",
+                    "title": "Open in BigFix Support Center",
+                    "url": "besupportcenter://viewOffer?offerId={{Topic.offerId}}"
+                  },
+                  {
+                    "type": "Action.OpenUrl",
+                    "title": "View in Browser",
+                    "url": "https://support.bigfix.com/offer/{{Topic.offerId}}"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+
+besupportcenter://viewOffer?offerId={{Topic.offerId}}
+uses the custom protocol to hand off directly to the installed Support Center app.
+
+Fallback “View in Browser” points at the public web portal.
+
+
+
+---
+
+3. How it works end‑to‑end
+
+1. Your bot sets Topic.offerId (e.g. “12345”) when it finds the matching solution.
+
+
+2. When the user types “show solution”, the above topic fires.
+
+
+3. Teams renders the Adaptive Card; clicking Open in BigFix Support Center invokes the local client via the besupportcenter:// URI.
+
+
+4. If the client isn’t installed or the protocol isn’t registered, the user can click View in Browser to go to the public site.
+
+
+
+
+---
+
+That’s all—no desktop flow required, just a custom URI and an Adaptive Card in your PVA topic.
+

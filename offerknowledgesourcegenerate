@@ -1,0 +1,162 @@
+Below is an updated PowerShell script that:
+
+1. Fetches all BigFix offers
+
+
+2. Extracts ID, Title, Description, ActionScript
+
+
+3. Constructs both a custom URI (to launch the local Support Center) and a web URL (fallback) for each offer
+
+
+4. Emits a JSON file (offers.json) that your PVA bot can ingest as a GenAI knowledge source and present users with both links.
+
+
+
+> Note: replace YOUR_BIGFIX_SERVER, credentials, and the web‑portal base URL as needed.
+
+
+
+<#
+.SYNOPSIS
+  Export all BigFix Support Center offers (with launch links) into JSON for PVA.
+
+.DESCRIPTION
+  1. Calls the BigFix REST API (/api/offers).
+  2. Parses each <Offer> for ID, Title, Description, ActionScript.
+  3. Builds:
+     • protocolLink = "besupportcenter://viewOffer?offerId=<ID>"
+     • webLink      = "https://support.bigfix.com/offer/<ID>"
+  4. Writes the array to 'offers.json'.
+
+  Your Copilot Studio bot can then answer questions and present:
+    – the ActionScript steps  
+    – a button to open in BigFix Support Center (protocolLink)  
+    – a fallback “View in browser” link (webLink)
+#>
+
+#region Configuration
+$BES_Server    = 'https://YOUR_BIGFIX_SERVER:52311'
+$Username      = 'api_user'
+$Password      = 'api_password'
+$ValidateSSL   = $false     # $true if your cert is valid
+$WebPortalBase = 'https://support.bigfix.com/offer'  # no trailing slash
+$OutputFile    = 'offers.json'
+#endregion
+
+try {
+    $url = "$BES_Server/api/offers"
+    Write-Host "Fetching offers from $url ..." -ForegroundColor Cyan
+
+    $responseXml = Invoke-RestMethod -Uri $url `
+                                     -Method Get `
+                                     -Credential (New-Object PSCredential($Username, (
+                                         ConvertTo-SecureString $Password -AsPlainText -Force))) `
+                                     -SkipCertificateCheck:(!$ValidateSSL)
+
+    [xml]$xmlDoc = $responseXml.OuterXml
+    $offers = @()
+
+    foreach ($node in $xmlDoc.BESAPI.Offer) {
+        # Extract or fallback on ID
+        $id = ($node.OfferID -as [string]) 
+        if (-not $id) { $id = ($node.ID -as [string]) }
+
+        $title       = ($node.Title       -as [string]).Trim()
+        $description = ($node.Description -as [string]).Trim()
+        $script      = ($node.ActionScript-as [string]).Trim()
+
+        # Build links
+        $protocolLink = "besupportcenter://viewOffer?offerId=$id"
+        $webLink      = "$WebPortalBase/$id"
+
+        $offers += [PSCustomObject]@{
+            id            = $id
+            title         = $title
+            description   = $description
+            actionScript  = $script
+            protocolLink  = $protocolLink
+            webLink       = $webLink
+        }
+    }
+
+    $json = $offers | ConvertTo-Json -Depth 4
+    Set-Content -Path $OutputFile -Value $json -Encoding UTF8
+    Write-Host "✅ Exported $($offers.Count) offers (with links) to '$OutputFile'." -ForegroundColor Green
+}
+catch {
+    Write-Error "❌ Error: $_"
+    exit 1
+}
+
+
+---
+
+How to run
+
+1. Save as Export-BigFixOffers.ps1
+
+
+2. Update the Configuration block ($BES_Server, creds, $WebPortalBase)
+
+
+3. Run in PowerShell:
+
+.\Export-BigFixOffers.ps1
+
+
+4. Check offers.json—it now looks like:
+
+
+
+[
+  {
+    "id": "12345",
+    "title": "Fix Wi‑Fi Drops in Windows 10",
+    "description": "Resets the WLAN AutoConfig service and clears network caches.",
+    "actionScript": "waithidden net stop wlansvc & waithidden net start wlansvc",
+    "protocolLink": "besupportcenter://viewOffer?offerId=12345",
+    "webLink": "https://support.bigfix.com/offer/12345"
+  },
+  {
+    "id": "67890",
+    "title": "Clear Temp Files",
+    "description": "Deletes all files from %TEMP% directory.",
+    "actionScript": "Remove-Item -Path $env:TEMP\\* -Recurse -Force",
+    "protocolLink": "besupportcenter://viewOffer?offerId=67890",
+    "webLink": "https://support.bigfix.com/offer/67890"
+  }
+]
+
+
+---
+
+3. Import & Map into Copilot Studio
+
+1. In Copilot Studio → Knowledge → + Add knowledge source
+
+
+2. Choose File → Upload offers.json
+
+
+3. Map fields:
+
+Question/search fields: title, description
+
+Answer field: actionScript
+
+Additional context fields: protocolLink, webLink
+
+
+
+
+Now when users ask, “How do I fix Wi‑Fi drops?” the bot can reply:
+
+> “Use this ActionScript: …
+Open in Support Center
+or View in browser”
+
+
+
+Your PVA bot is now empowered with a GenAI knowledge source that not only tells users the script to run but also provides direct links to open the solution in their local BigFix client or browser.
+

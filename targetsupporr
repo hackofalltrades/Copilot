@@ -1,47 +1,56 @@
-
-
 Add-Type -AssemblyName UIAutomationClient
 
-# alias types
-$AE = [System.Windows.Automation.AutomationElement]
-$PC = [System.Windows.Automation.PropertyCondition]
-$AC = [System.Windows.Automation.AndCondition]
-
-# grab the TabItem named “Progress” and select it
-(
-  $AE::RootElement
-    .FindFirst([System.Windows.Automation.TreeScope]::Children,
-      $PC::new($AE::NameProperty,    'BigFix Support Center'))
-    .FindFirst([System.Windows.Automation.TreeScope]::Descendants,
-      $PC::new($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::Tab))
-    .FindFirst([System.Windows.Automation.TreeScope]::Children,
-      $AC::new(
-        $PC::new($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem),
-        $PC::new($AE::NameProperty,        'Progress')
-      )
+try {
+    # 1. find the BigFix Support Center dialog
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $dlg  = $root.FindFirst(
+        [System.Windows.Automation.TreeScope]::Children,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::NameProperty,
+            "BigFix Support Center"
+        ))
     )
-    .GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-).Select()
+    if (-not $dlg) { throw "Dialog 'BigFix Support Center' not found." }
 
+    # 2. find the Tab control
+    $tab = $dlg.FindFirst(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        (New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Tab
+        ))
+    )
+    if (-not $tab) { throw "Tab control not found." }
 
----
+    # 3. find the TabItem named "Progress"
+    $progress = $tab.FindFirst(
+        [System.Windows.Automation.TreeScope]::Children,
+        (New-Object System.Windows.Automation.AndCondition(
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::TabItem
+            )),
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::NameProperty,
+                "Progress"
+            ))
+        ))
+    )
+    if (-not $progress) { throw "TabItem 'Progress' not found." }
 
-Ultra‑compact one‑liner
-
-Add-Type UIAutomationClient;
-([System.Windows.Automation.AutomationElement]::RootElement
- .FindFirst([System.Windows.Automation.TreeScope]::Children,
-   [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'BigFix Support Center'))
- .FindFirst([System.Windows.Automation.TreeScope]::Descendants,
-   [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Tab))
- .FindFirst([System.Windows.Automation.TreeScope]::Children,
-   [System.Windows.Automation.AndCondition]::new(
-     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::TabItem),
-     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'Progress')
-   )
- )
- .GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-).Select()
-
-
+    # 4. select it via SelectionItemPattern
+    $sel = $progress.GetCurrentPattern(
+        [System.Windows.Automation.SelectionItemPattern]::Pattern
+    )
+    if ($sel) {
+        $sel.Select()
+        Write-Output "✅ 'Progress' tab selected."
+    }
+    else {
+        throw "SelectionItemPattern not available on that TabItem."
+    }
+}
+catch {
+    Write-Error "❌ Failed to select tab: $_"
+}
 

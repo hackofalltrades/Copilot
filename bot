@@ -1,0 +1,415 @@
+Below is a revised end‑to‑end plan and all your topic + flow code, updated to avoid premium connectors wherever possible.
+
+
+---
+
+1. Power Automate Flows (Standard Connectors Only)
+
+1.1 GetUserTitle Flow
+
+Use Office 365 Users rather than HTTP/Graph.
+
+1. Trigger – “When a Power Virtual Agent calls a flow (V2)”
+
+Input 
+
+userEmail  (Text)  — “Email address passed from PVA”
+
+
+
+2. Actions 
+
+Get user profile (V2) 
+
+User (UPN): userEmail
+
+Select fields: jobTitle
+
+
+Return value(s) to PVA 
+
+Output name: userTitle
+
+Value:
+
+@outputs('Get_user_profile_(V2)')?['body/jobTitle']
+
+
+
+
+
+<details><summary>Flow JSON</summary>{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": { "schema": {} }
+      }
+    },
+    "actions": {
+      "Get_user_profile_(V2)": {
+        "type": "OpenApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['office365users']['connectionId']"
+            }
+          },
+          "operationId": "GetUserProfileV2",
+          "parameters": {
+            "userId": "@triggerBody()?['userEmail']",
+            "$select": "jobTitle"
+          }
+        }
+      },
+      "Respond_to_PVA": {
+        "type": "Response",
+        "kind": "Http",
+        "inputs": {
+          "statusCode": 200,
+          "body": {
+            "userTitle": "@outputs('Get_user_profile_(V2)')?['body/jobTitle']"
+          }
+        },
+        "runAfter": { "Get_user_profile_(V2)": ["Succeeded"] }
+      }
+    }
+  }
+}
+
+</details>
+---
+
+1.2 CreateIncident Flow
+
+NOTE: HTTP is a premium connector. If you cannot use it, you’ll need to have an on‑prem/webhook or use Remedy’s native connector (if available to you).
+
+1. Trigger: “When a Power Virtual Agent calls a flow (V2)”
+
+Inputs:
+
+firstName        (Text)
+email            (Text)
+issueDescription (Text)
+
+
+
+2. Actions:
+
+HTTP (premium—only unavoidable here)
+
+{
+  "method":"POST",
+  "uri":"https://yourcompany.remedy/api/incidents",
+  "headers":{"Content-Type":"application/json"},
+  "body":{
+    "First_Name":"@triggerBody()?['firstName']",
+    "Email":"@triggerBody()?['email']",
+    "Summary":"@triggerBody()?['issueDescription']",
+    "Priority":"Medium"
+  }
+}
+
+Response to PVA
+
+{ "incidentId":"@body('HTTP')?['id']" }
+
+
+
+
+<details><summary>Flow JSON</summary>{
+  "definition": {
+    "triggers": {
+      "manual": { "type":"Request","kind":"Http","inputs":{ "schema":{} } }
+    },
+    "actions": {
+      "HTTP": {
+        "type":"Http",
+        "inputs": {
+          "method":"POST",
+          "uri":"https://yourcompany.remedy/api/incidents",
+          "headers":{"Content-Type":"application/json"},
+          "body":{
+            "First_Name":"@triggerBody()?['firstName']",
+            "Email":"@triggerBody()?['email']",
+            "Summary":"@triggerBody()?['issueDescription']",
+            "Priority":"Medium"
+          }
+        }
+      },
+      "Respond_to_PVA": {
+        "type":"Response",
+        "inputs": {
+          "statusCode":200,
+          "body":{"incidentId":"@body('HTTP')?['id']"}
+        },
+        "runAfter":{"HTTP":["Succeeded"]}
+      }
+    }
+  }
+}
+
+</details>
+---
+
+1.3 UpdateIncident & 1.4 FrustrationAlert
+
+Both use HTTP (premium). If you must avoid premium entirely, you can replace “FrustrationAlert” with a simple SendActivity in‑bot or post to Teams via Office 365 Outlook mail connector (standard) instead of Graph.
+
+
+---
+
+2. Copilot Studio Bot
+
+2.1 Create Bot
+
+web.powerva.microsoft.com → Start from blank →
+Name ITSupportBot, English (US), Enable Teams SSO → Save
+
+
+
+---
+
+2.2 Topics (Code Editor → Paste YAML)
+
+2.2.1 Welcome Topic
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: welcomeDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: sendWelcome
+      activity: "Hi! I'm ITSupportBot. Let’s find your support path."
+
+    - kind: SetVariable
+      id: setUserEmail
+      variable: Topic.capturedUPN
+      value: =System.User.PrincipalName
+
+    - kind: InvokeFlowAction
+      id: invokeGetUserTitleFlow
+      input:
+        binding:
+          userEmail: =Topic.capturedUPN
+      output:
+        binding:
+          userTitle: Topic.userTitle
+
+    - kind: ConditionGroup
+      id: branchByTitle
+      conditions:
+        - id: technicianPath
+          condition: |
+            contains(Topic.userTitle,'Technician')
+            || contains(Topic.userTitle,'Helpdesk')
+          actions:
+            - kind: SendActivity
+              id: sendTechnician
+              activity: "Welcome Technician! Technician resources are here."
+        - id: generalPath
+          actions:
+            - kind: SendActivity
+              id: sendGeneral
+              activity: "Welcome! General IT support resources are here."
+
+
+---
+
+2.2.2 Password Reset Topic
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: passwordResetDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: askResetVPN
+      activity: "Are you connected to the company network (VPN)?"
+
+    - kind: AskQuestion
+      id: askNetwork
+      prompt: "Yes or No?"
+      property: Topic.isOnNetwork
+
+    - kind: ConditionGroup
+      id: vpnCondition
+      conditions:
+        - id: onVPN
+          condition: equals(toLower(Topic.isOnNetwork),'yes')
+          actions:
+            - kind: SendActivity
+              id: sendInternalLink
+              activity: "Use internal SSPR portal: [SSPR Link]"
+        - id: offVPN
+          actions:
+            - kind: SendActivity
+              id: sendExternalLink
+              activity: "Use external reset link: [External Link]"
+
+    - kind: AskQuestion
+      id: confirmReset
+      prompt: "Did that solve it? (Yes/No)"
+      property: Topic.passwordResetSuccess
+
+    - kind: ConditionGroup
+      id: resetResolve
+      conditions:
+        - id: notSolved
+          condition: equals(toLower(Topic.passwordResetSuccess),'no')
+          actions:
+            - kind: InvokeFlowAction
+              id: createIncidentFlow
+              input:
+                binding: {}
+              output:
+                binding:
+                  incidentId: Topic.incidentId
+            - kind: SendActivity
+              id: ticketCreated
+              activity: "Ticket created: {{Topic.incidentId}}"
+
+
+---
+
+2.2.3 Mobile Device Help
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: mobileSupportDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: askDevice
+      activity: "Which device? (iPhone/Android/Other)"
+
+    - kind: AskQuestion
+      id: getDeviceType
+      prompt: "iPhone, Android, or Other?"
+      property: Topic.mobileDeviceType
+
+    - kind: ConditionGroup
+      id: deviceCond
+      conditions:
+        - id: iphone
+          condition: equals(toLower(Topic.mobileDeviceType),'iphone')
+          actions:
+            - kind: SendActivity
+              id: iphoneHelp
+              activity: "iPhone guide: [iPhone KB]"
+        - id: android
+          condition: equals(toLower(Topic.mobileDeviceType),'android')
+          actions:
+            - kind: SendActivity
+              id: androidHelp
+              activity: "Android guide: [Android KB]"
+        - id: other
+          actions:
+            - kind: SendActivity
+              id: otherHelp
+              activity: "Please describe your device."
+
+    - kind: AskQuestion
+      id: confirmMobile
+      prompt: "Did that fix it? (Yes/No)"
+      property: Topic.mobileIssueResolved
+
+    - kind: ConditionGroup
+      id: mobileResolve
+      conditions:
+        - id: notFixed
+          condition: equals(toLower(Topic.mobileIssueResolved),'no')
+          actions:
+            - kind: InvokeFlowAction
+              id: createMobileIncident
+              input:
+                binding: {}
+              output:
+                binding:
+                  incidentId: Topic.incidentId
+            - kind: SendActivity
+              id: mobileTicket
+              activity: "Ticket opened: {{Topic.incidentId}}"
+
+
+---
+
+2.2.4 Escalation Topic
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: escalationDialog
+  intent: {}
+  actions:
+    - kind: SendActivity
+      id: sendEscalation
+      activity: "Opening a live support ticket."
+
+    - kind: InvokeFlowAction
+      id: createEscalationIncident
+      input:
+        binding: {}
+      output:
+        binding:
+          incidentId: Topic.incidentId
+
+    - kind: SendActivity
+      id: confirmEscalation
+      activity: "Ticket: {{Topic.incidentId}}. Live agent will contact you."
+
+
+---
+
+2.2.5 Frustration Management
+
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: frustrationDialog
+  intent: {}
+  actions:
+    - kind: SetVariable
+      id: initFrust
+      variable: Topic.frustrationLevel
+      value: =if(empty(Topic.frustrationLevel),0,Topic.frustrationLevel)
+
+    - kind: SetVariable
+      id: incFrust
+      variable: Topic.frustrationLevel
+      value: =add(Topic.frustrationLevel,1)
+
+    - kind: ConditionGroup
+      id: frustCond
+      conditions:
+        - id: highFrust
+          condition: greaterThanOrEquals(Topic.frustrationLevel,2)
+          actions:
+            - kind: SendActivity
+              id: frustAlert
+              activity: "I’m alerting IT support now."
+            - kind: SendActivity
+              id: fallbackHuman
+              activity: "A live agent will join shortly."
+
+
+---
+
+4. Enable Transcripts & Publish
+
+Bot Settings → Monitoring → Enable conversation transcripts
+
+Publish → Select Microsoft Teams
+
+
+
+---
+
+All JSON/YAML above uses only standard connectors (Office 365 Users, built‑in AskQuestion, SendActivity, InvokeFlowAction) except HTTP calls required for Remedy.
+

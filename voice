@@ -1,0 +1,30 @@
+Action: the same PowerShell command above
+
+
+
+---
+
+7. Go Live & Test
+
+1. Start your script (or reboot your host).
+
+2. Dial your Teams service‑account phone number or share the meeting link.
+
+3. In the meeting: … → Start live captions.
+
+4. Speak as a participant:
+
+Your words show up in CC‑Relay.
+
+Power Automate flow reposts them with an @mention.
+
+PVA bot responds in‐thread.
+
+Your desktop agent TTS speaks PVA’s reply back into the meeting.
+
+
+
+
+---
+
+You’re now fully deployed: N concurrent callers on one Teams number, all handled in regular browser windows, with no premium connectors—just Teams-standard, PVA, and a Windows 11 accessibility‑powered agent.

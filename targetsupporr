@@ -1,46 +1,47 @@
-# load UIAutomation types
+
+
 Add-Type -AssemblyName UIAutomationClient
 
-# 1. find the main dialog by its Window Name
-$root = [System.Windows.Automation.AutomationElement]::RootElement
-$dlg  = $root.FindFirst(
-    [System.Windows.Automation.TreeScope]::Children,
-    (New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::NameProperty,
-        "BigFix Support Center"
-    ))
-)
-if (-not $dlg) { throw "❌ Dialog 'BigFix Support Center' not found" }
+# alias types
+$AE = [System.Windows.Automation.AutomationElement]
+$PC = [System.Windows.Automation.PropertyCondition]
+$AC = [System.Windows.Automation.AndCondition]
 
-# 2. find the Tab control under that dialog
-$tab = $dlg.FindFirst(
-    [System.Windows.Automation.TreeScope]::Descendants,
-    (New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::Tab
-    ))
-)
-if (-not $tab) { throw "❌ Tab control not found" }
+# grab the TabItem named “Progress” and select it
+(
+  $AE::RootElement
+    .FindFirst([System.Windows.Automation.TreeScope]::Children,
+      $PC::new($AE::NameProperty,    'BigFix Support Center'))
+    .FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+      $PC::new($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::Tab))
+    .FindFirst([System.Windows.Automation.TreeScope]::Children,
+      $AC::new(
+        $PC::new($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem),
+        $PC::new($AE::NameProperty,        'Progress')
+      )
+    )
+    .GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+).Select()
 
-# 3. collect all TabItem children, pick the one named "NSD - Get Help"
-$items = $tab.FindAll(
-    [System.Windows.Automation.TreeScope]::Children,
-    (New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::TabItem
-    ))
-)
 
-$nsdTab = $items | Where-Object { $_.Current.Name -eq "NSD - Get Help" }
-if (-not $nsdTab) { throw "❌ TabItem 'NSD - Get Help' not found" }
+---
 
-# 4. select it via SelectionItemPattern
-$sel = $nsdTab.GetCurrentPattern(
-    [System.Windows.Automation.SelectionItemPattern]::Pattern
-)
-if ($sel) {
-    $sel.Select()
-    "✅ Tab 'NSD - Get Help' has been selected."
-} else {
-    throw "❌ SelectionItemPattern not available on that TabItem."
-}
+Ultra‑compact one‑liner
+
+Add-Type UIAutomationClient;
+([System.Windows.Automation.AutomationElement]::RootElement
+ .FindFirst([System.Windows.Automation.TreeScope]::Children,
+   [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'BigFix Support Center'))
+ .FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+   [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Tab))
+ .FindFirst([System.Windows.Automation.TreeScope]::Children,
+   [System.Windows.Automation.AndCondition]::new(
+     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::TabItem),
+     [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,'Progress')
+   )
+ )
+ .GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+).Select()
+
+
+

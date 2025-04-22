@@ -1,4 +1,229 @@
+Here’s your complete, end‑to‑end runbook—every component and configuration you need, from tenant setup through desktop agent—so you can deploy your multi‑caller, voice‑driven Teams “bot” in one go.
+
+
+---
+
+1. Tenant & Teams Setup
+
+1. Create a Team & Channel
+
+Team name: PVA‑Bots
+
+Channel name: CC‑Relay
+
+
+
+2. Install your PVA bot into that channel
+
+In Teams, go Apps → Power Virtual Agents, select your bot, choose Add to a team → pick PVA‑Bots / CC‑Relay.
+
+
+
+3. Capture the three IDs
+
+Team ID: Teams “…” → Get link to team → copy the GUID after groupId=
+
+Channel ID: Teams “…” on the channel → Get link to channel → copy the GUID after channelId=
+
+Bot App ID: Teams Developer Portal → Apps → select your PVA bot → copy App ID
+
+
+
+
+
+---
+
+2. Audio Routing on Windows 11
+
+1. Install a virtual‑audio‑cable (e.g. VB‑Cable) or enable Stereo Mix.
+
+
+2. In Teams Settings → Devices, set Microphone to the virtual‑cable/St Mix device.
+
+
+
+
+---
+
+3. Build the “CC Relay” Power Automate Flow
+
+1. Create → Automated cloud flow
+
+Name: PVA CC Relay (Teams‑Only)
+
+Trigger: When a new channel message is added (V3) → Create
+
+Configure: Team = PVA‑Bots, Channel = CC‑Relay
+
+
+
+2. Add a Condition (to skip bot’s own messages)
+
+Expression (left):
+
+triggerBody()?['from']?['user']?['id']
+
+Operator: is not equal to
+
+Value: <YOUR_BOT_APP_ID>
+
+
+
+3. Under “If yes”, add Post message in a channel (V3)
+
+Team: PVA‑Bots
+
+Channel: CC‑Relay
+
+Post as: Flow bot
+
+Message: switch to “enter entire array” and paste:
+
+{
+  "body": {
+    "contentType": "html",
+    "content": "<at id=\"0\">PVA Bot</at> @{triggerBody()?['body']['content']}"
+  },
+  "mentions": [
+    {
+      "id": 0,
+      "mentionText": "PVA Bot",
+      "mentioned": {
+        "application": { "id": "<YOUR_BOT_APP_ID>" }
+      }
+    }
+  ]
+}
+
+Advanced → groupId: <YOUR_TEAM_ID>
+channelId: <YOUR_CHANNEL_ID>
+
+
+
+4. Save and Turn on the flow.
+
+
+
+
+---
+
+4. Prepare Your Windows 11 Host
+
+1. Install Microsoft Edge (or Chrome) if not already present.
+
+
+2. Create per‑agent browser profiles (persistent, non‑private):
+
+C:\TeamsProfiles\Agent1
+C:\TeamsProfiles\Agent2
+C:\TeamsProfiles\Agent3
+
+
+3. Initialize each profile by running:
+
+Start-Process msedge.exe "--user-data-dir=""C:\TeamsProfiles\AgentX"" https://teams.microsoft.com"
+
+– then sign in with the respective service account and allow “Stay signed in.”
+
+
+
+
+---
+
+5. Deploy the Relay Script
+
+1. Save this as C:\RelayAgent\Start-Relay-Agents.ps1 (replace placeholders):
+
+Add-Type -AssemblyName System.Speech
+Add-Type -AssemblyName UIAutomationClient
+
+# Flow and meeting join URL
+$flowUrl = 'https://<YOUR_FLOW_ENDPOINT>'
+$joinUrl = 'https://teams.microsoft.com/l/meetup-join/<MEETING_ID>'
+
+# Browser profile folders
+$profiles = @(
+  'C:\TeamsProfiles\Agent1',
+  'C:\TeamsProfiles\Agent2',
+  'C:\TeamsProfiles\Agent3'
+)
+
+# Shared TTS engine
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+
+function Start-AgentInstance {
+  param($profileDir)
+
+  # Launch Teams Web in app mode
+  $args = "--user-data-dir=`"$profileDir`" --app=`"$joinUrl`""
+  $proc = Start-Process msedge.exe -ArgumentList $args -PassThru
+  Start-Sleep -Seconds 5
+
+  # Find the Live captions pane in that window
+  $root = [Automation.AutomationElement]::RootElement
+  do {
+    Start-Sleep -Milliseconds 500
+    $pane = $root.FindFirst(
+      [Automation.TreeScope]::Descendants,
+      (New-Object Automation.AndCondition(
+        (New-Object Automation.PropertyCondition(
+          [Automation.AutomationElement]::ProcessIdProperty, $proc.Id)),
+        (New-Object Automation.PropertyCondition(
+          [Automation.AutomationElement]::NameProperty, 'Live captions'))
+      ))
+    )
+  } until ($pane)
+
+  # Subscribe to TextChangedEvent
+  $handler = [Automation.AutomationEventHandler]{
+    param($s,$e)
+    $tp   = $s.GetCurrentPattern([Automation.TextPattern]::Pattern)
+    $text = $tp.DocumentRange.GetText(-1).Trim()
+    if ($text) {
+      $resp = Invoke-RestMethod -Uri $flowUrl -Method Post `
+        -ContentType 'application/json' `
+        -Body (@{ caption = $text } | ConvertTo-Json)
+      if ($resp.botResponse) { $synth.Speak($resp.botResponse) }
+    }
+  }
+
+  [Automation.Automation]::AddAutomationEventHandler(
+    [Automation.TextPattern]::TextChangedEvent,
+    $pane,
+    [Automation.TreeScope]::Element,
+    $handler
+  )
+
+  Write-Host "Agent started for $profileDir (PID $($proc.Id))"
+}
+
+# Launch all agents
+foreach ($p in $profiles) {
+  Start-Job -ScriptBlock { param($pp) Start-AgentInstance -profileDir $pp } `
+            -ArgumentList $p
+}
+
+Write-Host "All agents launched. Press Enter to stop."
+Read-Host
+Get-Job | Stop-Job | Remove-Job
+
+
+
+
+---
+
+6. Run or Schedule the Script
+
+Manual:
+
+powershell -ExecutionPolicy Bypass -File "C:\RelayAgent\Start-Relay-Agents.ps1"
+
+Automated (Task Scheduler):
+
+Trigger: At startup or user‑logon
+
 Action: the same PowerShell command above
+
 
 
 
@@ -8,15 +233,18 @@ Action: the same PowerShell command above
 
 1. Start your script (or reboot your host).
 
+
 2. Dial your Teams service‑account phone number or share the meeting link.
 
+
 3. In the meeting: … → Start live captions.
+
 
 4. Speak as a participant:
 
 Your words show up in CC‑Relay.
 
-Power Automate flow reposts them with an @mention.
+Power Automate flow reposts them with an @mention.
 
 PVA bot responds in‐thread.
 
@@ -25,6 +253,8 @@ Your desktop agent TTS speaks PVA’s reply back into the meeting.
 
 
 
+
 ---
 
-You’re now fully deployed: N concurrent callers on one Teams number, all handled in regular browser windows, with no premium connectors—just Teams-standard, PVA, and a Windows 11 accessibility‑powered agent.
+You’re now fully deployed: N concurrent callers on one Teams number, all handled in regular browser windows, with no premium connectors—just Teams-standard, PVA, and a Windows 11 accessibility‑powered agent.
+

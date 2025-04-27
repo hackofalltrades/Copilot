@@ -1,0 +1,135 @@
+Here’s a parameterized “Test” Fixlet template that you can drop into your Knowledge Source and invoke via Copilot Studio (or generate via your flow). It:
+
+1. Checks file existence
+
+
+2. Launches the app for a few seconds
+
+
+3. Verifies it started without error (exit code 0)
+
+
+4. Stops the process
+
+
+5. Is fully parameterized for any {AppName} and {ExePath}/{LaunchArgs}.
+
+
+
+
+---
+
+1) GenAI Step (Copilot) to Discover Exe Path & Launch Args
+
+In your Copilot YAML, after you’ve matched AppName and before you create the Test Fixlet, add:
+
+- createText:
+    prompt: |
+      You are an expert on Windows applications installed via Winget.
+      For the application named **{AppName}**, provide:
+        1. The full path to its primary executable (e.g., C:\Program Files\App\App.exe).
+        2. Any common command-line arguments needed to launch it in a default state (or “none”).
+      Respond in JSON only, like:
+      {
+        "ExePath": "C:\\Program Files\\Example\\example.exe",
+        "LaunchArgs": "--someFlag"
+      }
+    variable: exeInfoJson
+
+Then parse exeInfoJson into two Copilot variables:
+
+${ExePath}
+
+${LaunchArgs}
+
+
+
+---
+
+2) Test Fixlet Template (.bes)
+
+Save this XML as Test_{AppName}.bes in your Knowledge Source. When generated, Copilot/flow will replace placeholders with your app’s values:
+
+<BES>
+  <Fixlet>
+    <Title>Test {AppName} Installation & Launch</Title>
+    <Description>
+      Verifies that **{AppName}** is installed (file exists) and can launch without errors.
+    </Description>
+
+    <!-- Relevance: file must exist -->
+    <Relevance><![CDATA[
+      exists file "{ExePath}"
+    ]]></Relevance>
+
+    <Actions>
+      <Action>
+        <ActionScript MIMEType="application/x-Fixlet-Windows-Shell"><![CDATA[
+action parameter query "ExePath" with description "Full path to {AppName} executable:" 
+action parameter query "LaunchArgs" with description "Arguments to launch {AppName} (or leave blank):"
+
+waithidden powershell.exe -NoProfile -Command ^
+  "try { ^
+     $p = Start-Process -FilePath '{parameter "ExePath"}' -ArgumentList '{parameter "LaunchArgs"}' -PassThru; ^
+     Start-Sleep -Seconds 5; ^
+     if ($p.HasExited) { throw 'Unexpected exit' }; ^
+     Stop-Process -Id $p.Id -ErrorAction Stop; ^
+     exit 0 ^
+   } catch { exit 1 }"
+
+        ]]></ActionScript>
+        <SuccessCriteria Option="ExitCodeEquals">
+          <Parameter>0</Parameter>
+        </SuccessCriteria>
+      </Action>
+    </Actions>
+  </Fixlet>
+</BES>
+
+How It Works
+
+Relevance: Checks that the executable exists at {ExePath}.
+
+ActionScript:
+
+Queries the path and args (both populated by your flow or Copilot defaults).
+
+Runs PowerShell:
+
+Start-Process launches the app.
+
+Waits 5 seconds.
+
+Ensures the process hasn’t already exited (catching immediate failures).
+
+Stops the process.
+
+Returns 0 on success, 1 on any exception.
+
+
+
+SuccessCriteria: Only a 0 exit code marks the test as passed.
+
+
+
+---
+
+3) Integration into Your Flow
+
+In your Power Automate loop for each app:
+
+1. After you’ve generated the four deployment fixlets, call the GenAI step above to get ExePath and LaunchArgs.
+
+
+2. Insert those into this Test Fixlet template (just like you do with AppName and AppVersion).
+
+
+3. Append the fully populated Test Fixlet to your output (AllFixletsText).
+
+
+
+
+---
+
+With this in place, each application will get a fifth Fixlet that not only checks installation by file, but also ensures the app actually launches without errors – giving you strong QA coverage.
+

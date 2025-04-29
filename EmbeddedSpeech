@@ -1,0 +1,100 @@
+PowerShell Command to Use Cognitive Services Speech SDK with Embedded TTS Voice
+
+Content may be unverified or unsafe. Report
+
+
+ChatGPT
+Try ChatGPT
+ChatGPT
+Using Microsoft Speech SDK in PowerShell for Offline Neural TTS
+You can use the Azure Cognitive Services Speech SDK on Windows to perform text-to-speech entirely offline by leveraging its embedded neural voice feature. This requires downloading an offline voice model (e.g., the Aria neural voice) and using the Speech SDK’s offline configuration. Below are the steps and a PowerShell script to load the embedded model and synthesize “Hello” locally without any cloud calls.
+1. Obtain the Offline Neural Voice Model (e.g., Aria)
+Microsoft provides certain neural voices for offline use via the Embedded Speech capability. You must first download the voice model package for the voice you want (for example, the Aria voice for en-US). These offline voice packages are not publicly available by default – you need to apply for access to the Embedded Speech limited-access program​
+learn.microsoft.com
+​
+learn.microsoft.com
+. Once approved, Microsoft will provide you instructions to download the model files for the selected voice and a corresponding license key for that model​
+learn.microsoft.com
+.
+Download the model: After gaining access, download the offline voice model (it may come as a zip or installer). For example, you might obtain a package for “en-US AriaNeural”. Extract or install it to a known location on your PC (e.g., C:\SpeechModels\en-US\AriaNeural).
+Locate the model files: The voice package will contain the data files for the TTS model. Take note of the directory path containing these files – this path will be used in the script.
+Get the license key: Along with the model, Microsoft provides a license string (usually a long text or key) that enables the offline voice. Keep this license string ready; it will be needed in the code to authorize use of the voice model.
+Note: Using an embedded/offline voice means no Azure subscription or endpoint is required. In offline mode, you do not use any cloud API keys – the Speech SDK will load the model from your local device and synthesize entirely on-device​
+learn.microsoft.com
+.
+2. Install the Speech SDK and Prepare the PowerShell Script
+Ensure you have the Speech SDK for Windows installed. You can download the SDK from Microsoft’s website or via NuGet. The SDK includes the .NET libraries (like Microsoft.CognitiveServices.Speech.dll) needed to use speech synthesis. Once the SDK is installed, you can write a PowerShell script to configure the offline voice and perform synthesis. Below is a single PowerShell script that: (a) loads the Speech SDK assembly, (b) creates an embedded speech config pointing to the offline model, (c) sets the Aria voice with its license, and (d) synthesizes and plays the word "Hello" through the default speaker output. Update the $sdkPath, $modelPath, $voiceName, and $voiceLicense variables as needed for your environment:
+# Path to the Speech SDK library (adjust if installed elsewhere)
+$sdkPath = "C:\Program Files\Microsoft Cognitive Services Speech SDK\SpeechSDK\bin\Windows\Microsoft.CognitiveServices.Speech.dll"
+Add-Type -Path $sdkPath
+
+# Variables for the offline voice model
+$modelPath    = "C:\SpeechModels\en-US\AriaNeural"   # Folder where Aria's offline model files are located
+$voiceName    = "en-US-AriaNeural"                  # Voice name for Aria (locale + voice, e.g., en-US AriaNeural)
+$voiceLicense = "<YOUR_VOICE_MODEL_LICENSE_TEXT>"   # The license key or text provided for the offline model
+
+# Create an embedded (offline) speech configuration using the local model path
+$embeddedConfig = [Microsoft.CognitiveServices.Speech.EmbeddedSpeechConfig]::FromPath($modelPath)
+# Set the embedded voice and its license key
+$embeddedConfig.SetSpeechSynthesisVoice($voiceName, $voiceLicense)
+# (Optional) If using a neural voice, set output format to 24kHz for best quality (Neural voices output at 24kHz)&#8203;:contentReference[oaicite:4]{index=4}
+$embeddedConfig.SetSpeechSynthesisOutputFormat([Microsoft.CognitiveServices.Speech.SpeechSynthesisOutputFormat]::Riff24Khz16BitMonoPcm)
+
+# Configure audio output to the default speaker
+$audioOut = [Microsoft.CognitiveServices.Speech.Audio.AudioConfig]::FromDefaultSpeakerOutput()
+
+# Instantiate the SpeechSynthesizer with the offline config and audio output
+$synthesizer = New-Object Microsoft.CognitiveServices.Speech.SpeechSynthesizer($embeddedConfig, $audioOut)
+
+# Synthesize speech from text and play it
+$synthesizer.SpeakTextAsync("Hello").Wait()   # This will speak "Hello" out loud using the offline Aria voice
+How this works: We use EmbeddedSpeechConfig.FromPath() to point the SDK to our local model files directory​
+learn.microsoft.com
+​
+learn.microsoft.com
+. We then call SetSpeechSynthesisVoice with the voice’s name and the provided license string to select the offline voice​
+learn.microsoft.com
+. In this example, $voiceName is "en-US-AriaNeural", which corresponds to Aria’s English (US) neural voice (the SDK also accepts the full formal name format, e.g. "Microsoft Server Speech Text to Speech Voice (en-US, AriaNeural)"​
+learn.microsoft.com
+, but the shorter locale-VoiceName format works as well). We also set the audio format to 24 kHz, 16-bit mono PCM – this is recommended for neural voices offline​
+learn.microsoft.com
+. Next, we create an AudioConfig for the default speaker output, so the synthesized audio will play through your speakers. Finally, we initialize a SpeechSynthesizer with our offline config and audio output, and call SpeakTextAsync("Hello"). The script waits for completion with .Wait(), and you should hear the word “Hello” spoken aloud by the Aria neural voice. No network connection is used during this synthesis – it runs fully locally using the embedded model.
+3. Run the Script and Verify
+Run the PowerShell script on your Windows machine. It will load the offline model and immediately synthesize “Hello” using the Aria voice. You should hear the output through the default audio device. This confirms that the Speech SDK is using the local neural voice model without calling the cloud (no Azure API calls are made, since we did not set any subscription or endpoint)​
+learn.microsoft.com
+. If you need a different voice or language, download the corresponding offline voice package from Microsoft (one female or male neural voice is available per locale by default in the embedded voice offerings​
+learn.microsoft.com
+). Point the $modelPath to that model’s folder and use the appropriate voice name. The rest of the procedure remains the same. Sources: Using EmbeddedSpeechConfig with downloaded models is the official method for offline Speech SDK synthesis​
+learn.microsoft.com
+​
+learn.microsoft.com
+. The code above follows Microsoft’s documentation and samples for embedded TTS, which demonstrate setting the voice name and license for the offline model and outputting audio to the speaker​
+learn.microsoft.com
+. By obtaining the Aria voice package and license, you can run the above script to say "Hello" offline, with no cloud dependency.
+Citations
+Favicon
+Embedded Speech - Speech service - Azure AI services | Microsoft Learn
+
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/embedded-speech
+Favicon
+Embedded Speech - Speech service - Azure AI services | Microsoft Learn
+
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/embedded-speech
+Favicon
+Embedded Speech - Speech service - Azure AI services | Microsoft Learn
+
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/embedded-speech
+Favicon
+Embedded Speech - Speech service - Azure AI services | Microsoft Learn
+
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/embedded-speech
+Favicon
+Embedded Speech - Speech service - Azure AI services | Microsoft Learn
+
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/embedded-speech
+Favicon
+Embedded Speech - Speech service - Azure AI services | Microsoft Learn
+
+https://learn.microsoft.com/en-us/azure/ai-services/speech-service/embedded-speech
+All Sources
+Faviconlearn.microsoft

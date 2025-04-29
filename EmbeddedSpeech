@@ -1,11 +1,73 @@
-PowerShell Command to Use Cognitive Services Speech SDK with Embedded TTS Voice
+The PowerShell script in your image is attempting to use Windows Runtime (WinRT) APIs for text-to-speech, but it's incorrectly mixing WinRT async APIs with classic .NET objects like SoundPlayer, which causes these errors:
 
-Content may be unverified or unsafe. Report
+Problems:
+
+1. GetResults() is not valid — WinRT async methods return IAsyncOperation, which needs await or .AsTask().Result
 
 
-ChatGPT
-Try ChatGPT
-ChatGPT
+2. SoundPlayer expects a WAV stream, not a WinRT stream
+
+
+3. RandomAccessStream::AsStreamForRead() doesn’t exist in the context you're using
+
+
+
+
+---
+
+Working Solution: Use System.Speech.Synthesis for Local TTS
+
+If you're just trying to say "Hello" with a voice like Zira or Aria, and want WAV output, use this instead:
+
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$synth.SelectVoice("Microsoft Zira Desktop")  # or use "Microsoft Aria Online (Natural)" if installed
+$synth.Speak("Hello")
+
+
+---
+
+If You Specifically Want Neural Voices (e.g., Aria Natural)
+
+You’ll need to:
+
+Use the Windows.Media.SpeechSynthesis namespace
+
+Use the SynthesizeTextToStreamAsync() method properly with async handling
+
+Convert IRandomAccessStream to a .NET stream
+
+
+Here’s a fixed version using WinRT properly and saving to WAV:
+
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+$ssml = "Hello from Aria"
+$synth = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::new()
+$streamOp = $synth.SynthesizeTextToStreamAsync($ssml)
+$stream = $streamOp.AsTask().Result
+
+# Convert WinRT stream to .NET stream
+$dotNetStream = [WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+
+# Save to WAV
+$path = "$env:TEMP\output.wav"
+$fileStream = [System.IO.File]::OpenWrite($path)
+$dotNetStream.CopyTo($fileStream)
+$fileStream.Close()
+
+# Play it
+Add-Type -AssemblyName presentationCore
+$player = New-Object System.Windows.Media.MediaPlayer
+$player.Open([Uri]::new($path))
+$player.Play()
+
+
+---
+
+Let me know if you want to install Aria voice offline or script voice selection with justification for enterprise deployment.
+
+
 Using Microsoft Speech SDK in PowerShell for Offline Neural TTS
 You can use the Azure Cognitive Services Speech SDK on Windows to perform text-to-speech entirely offline by leveraging its embedded neural voice feature. This requires downloading an offline voice model (e.g., the Aria neural voice) and using the Speech SDK’s offline configuration. Below are the steps and a PowerShell script to load the embedded model and synthesize “Hello” locally without any cloud calls.
 1. Obtain the Offline Neural Voice Model (e.g., Aria)

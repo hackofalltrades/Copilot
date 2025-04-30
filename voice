@@ -1,4 +1,37 @@
-Here’s your complete, end‑to‑end runbook—every component and configuration you need, from tenant setup through desktop agent—so you can deploy your multi‑caller, voice‑driven Teams “bot” in one go.
+Add-Type -AssemblyName System.Windows.Forms
+
+$form = New-Object Windows.Forms.Form
+$form.Text = "Live Narrator Feed"
+$form.Width = 800
+$form.Height = 400
+
+$box = New-Object Windows.Forms.TextBox
+$box.Multiline = $true
+$box.Dock = 'Fill'
+$box.ScrollBars = 'Vertical'
+$box.ReadOnly = $true
+$form.Controls.Add($box)
+
+$form.Add_Shown({
+    $form.Activate()
+    $box.Focus()
+
+    Start-Job -ScriptBlock {
+        $syncBox = $using:box
+        for ($i = 1; $i -le 1000; $i++) {
+            $timestamp = Get-Date -Format "HH:mm:ss"
+            $line = "[$timestamp] Log entry $i`r`n"
+            $syncBox.Invoke([Action]{
+                $syncBox.AppendText($line)
+                $syncBox.SelectionStart = $syncBox.Text.Length
+                $syncBox.ScrollToCaret()
+            })
+            Start-Sleep -Seconds 2
+        }
+    }
+})
+
+[void]$form.ShowDialog()
 
 
 ---

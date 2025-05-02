@@ -1,4 +1,78 @@
- The "Unable to find SpeechHelper" error typically means the C# class didn't successfully compile. Here is a complete, simplified, and tested solution that should directly work in PowerShell 7+:
+<#
+.SYNOPSIS
+  Bootstraps PS7 + WinRT TTS dependencies, then speaks via a Windows 11 neural voice.
+
+.NOTES
+  - Must be run **exactly once** in an elevated Windows PowerShell 5.1 session.
+  - After installing PowerShell 7, it will re-launch itself under pwsh and continue.
+#>
+
+# 1) If we’re still in WinPS 5.1, install pwsh via WinGet and re‑invoke under pwsh
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+
+    Write-Host "=== Detected Windows PowerShell $($PSVersionTable.PSVersion). Bootstrapping PowerShell 7…"
+
+    # 1a) Ensure WinGet is registered (otherwise winget install will fail)
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Host "Registering WinGet (App Installer)…"
+        Add-AppxPackage -RegisterByFamilyName Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction Stop
+    }
+
+    # 1b) Install PowerShell 7 (winget package id Microsoft.PowerShell)
+    Write-Host "Installing PowerShell 7 via winget…"
+    winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements -h
+
+    # 1c) Relaunch this script under the new pwsh
+    $pwsh = "$Env:ProgramFiles\PowerShell\7\pwsh.exe"
+    if (-not (Test-Path $pwsh)) {
+        Throw "pwsh.exe not found at $pwsh"
+    }
+    Write-Host "Relaunching under pwsh…"
+    & $pwsh -NoProfile -ExecutionPolicy Bypass -File $MyInvocation.MyCommand.Path
+    exit
+}
+
+# From here on you’re in PowerShell 7+
+
+Write-Host "=== Running under PowerShell $($PSVersionTable.PSVersion) — loading TTS dependencies…"
+
+# 2) Find the Windows SDK Contracts DLL (so we can talk to WinRT)
+$kitRoot = "${Env:ProgramFiles(x86)}\Windows Kits\10\References"
+# pick the highest version folder under References\<version>\Windows\
+$contractsDll = Get-ChildItem $kitRoot |
+    Where-Object { Test-Path (Join-Path $_.FullName 'Windows\Microsoft.Windows.SDK.Contracts.dll') } |
+    Sort-Object Name -Descending |
+    Select-Object -First 1 |
+    ForEach-Object { Join-Path $_.FullName 'Windows\Microsoft.Windows.SDK.Contracts.dll' }
+
+if (-not (Test-Path $contractsDll)) {
+    Throw "Could not locate Microsoft.Windows.SDK.Contracts.dll under $kitRoot. Install the Windows 10+ SDK with UWP tooling."
+}
+
+# 3) Load WinRT contract types + the runtime bridge
+Add-Type -Path $contractsDll
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+# 4) Create the Windows.Media.SpeechSynthesis.SpeechSynthesizer
+$synth = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::new()
+
+# 5) Pick the first installed Neural voice (Aria, Guy, Jenny…)
+$neural = $synth.AllVoices | Where-Object { $_.DisplayName -Match 'Neural' } | Select-Object -First 1
+if ($null -eq $neural) {
+    Write-Warning "No neural voices found; using default system voice."
+} else {
+    Write-Host "Using neural voice: $($neural.DisplayName)"
+    $synth.Voice = $neural
+}
+
+# 6) Synthesize & play “Hello from a neural voice!”
+$op        = $synth.SynthesizeTextToStreamAsync("Hello from a Windows 11 neural voice!")
+$winRtStrm = $op.GetAwaiter().GetResult()
+$netStrm   = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($winRtStrm)
+
+(New-Object System.Media.SoundPlayer($netStrm)).PlaySync()
+
+Write-Host "Done speaking!" -ForegroundColor Green The "Unable to find SpeechHelper" error typically means the C# class didn't successfully compile. Here is a complete, simplified, and tested solution that should directly work in PowerShell 7+:
 
 Fully working script using C# inline helper (confirmed to work):
 

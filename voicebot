@@ -1,3 +1,47 @@
+You don’t actually need the full Windows SDK on disk to get at the WinRT TTS types — Windows 11 ships the necessary WinMDs under %windir%\System32\WinMetadata. Here’s how to load and call the neural TTS engine purely from what’s already on your machine, with no SDK install at all:
+
+# 1) Make sure you’re in PowerShell 7+ (pwsh), not the old ISE/5.1:
+if ($PSVersionTable.PSEdition -ne 'Core' -or $PSVersionTable.PSVersion.Major -lt 7) {
+    throw "Please run this under PowerShell 7 or later (pwsh)."
+}
+
+# 2) Point at the built‑in WinMD for the SpeechSynthesizer
+$winmd = "$env:windir\System32\WinMetadata\Windows.Media.winmd"
+if (-not (Test-Path $winmd)) {
+    throw "Cannot find Windows.Media.winmd at $winmd. Are you on Windows 11?"
+}
+
+# 3) Load the WinMD so pwsh can see the WinRT types
+Add-Type -Path $winmd
+
+# 4) Load the WinRT‑to‑.NET bridge for stream conversions
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+# 5) Create and configure the TTS engine
+$synth = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::new()
+# Pick the first “Neural” voice installed
+$neural = $synth.AllVoices |
+          Where-Object DisplayName -Match 'Neural' |
+          Select-Object -First 1
+if ($neural) { $synth.Voice = $neural }
+
+# 6) Synthesize “Hello” and play it
+$op       = $synth.SynthesizeTextToStreamAsync("Hello from an offline neural voice!")
+$stream   = $op.GetAwaiter().GetResult()
+$netStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+(New-Object System.Media.SoundPlayer($netStream)).PlaySync()
+
+Why this works
+
+Windows.Media.winmd in C:\Windows\System32\WinMetadata\ is the system‑provided metadata for the SpeechSynthesizer API.
+
+Add-Type -Path can load WinMD files in PowerShell 7, so you don’t need the SDK’s UnionMetadata or Contracts DLL.
+
+The rest is exactly the same: pick your neural voice, call SynthesizeTextToStreamAsync(), convert the WinRT stream, and play it.
+
+
+This gives you high‑quality, fully offline neural TTS on Windows 11 without ever touching the Windows SDK installer.
+
 <#
 .SYNOPSIS
   Bootstraps PS7 + WinRT TTS dependencies, then speaks via a Windows 11 neural voice.

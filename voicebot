@@ -1,3 +1,129 @@
+Since .NET 6 reached end‑of‑support in November 2024, you’ll want to target a currently supported release—.NET 8 is the latest LTS. Here’s how to update your Visual Studio 2022 project from scratch to use .NET 8 (and keep calling the WinRT TTS API as before):
+
+
+---
+
+1. Install .NET 8 SDK in Visual Studio
+
+1. Open the Visual Studio Installer.
+
+
+2. Click Modify on your VS 2022 Professional instance.
+
+
+3. Under Workloads, ensure “.NET desktop development” is checked.
+
+
+4. Switch to Individual components.
+
+
+5. Scroll to .NET, and check:
+
+.NET 8.0 Runtime (x64)
+
+.NET 8.0 SDK
+
+
+
+6. Click Modify to install.
+
+
+
+
+---
+
+2. Create or Retarget Your Console App to .NET 8
+
+If you’re starting new:
+
+1. File → New → Project → Console App → Next
+
+
+2. In Target Framework, pick “.NET 8.0 (Long-term support)” → Create
+
+
+
+If you already have a .NET 6 project, edit its .csproj to:
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Retarget to .NET 8 and enable Windows WinRT APIs -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinRT contracts for SpeechSynthesizer -->
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22621.755" />
+  </ItemGroup>
+</Project>
+
+
+---
+
+3. Update Your Code (Program.cs)
+
+You can keep the same C# from before—it works unchanged under .NET 8:
+
+using System;
+using System.IO;
+using System.Linq;
+using System.Media;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
+using Windows.Media.SpeechSynthesis;
+
+namespace NeuralTtsDemo
+{
+    class Program
+    {
+        static async Task Main()
+        {
+            using var synth = new SpeechSynthesizer();
+
+            // Pick the first Neural voice
+            var neural = synth.AllVoices.FirstOrDefault(v => v.DisplayName.Contains("Neural"));
+            if (neural != null)
+            {
+                synth.Voice = neural;
+                Console.WriteLine($"Using voice: {neural.DisplayName}");
+            }
+            else
+            {
+                Console.WriteLine("No Neural voice found; using default.");
+            }
+
+            using var result = await synth.SynthesizeTextToStreamAsync("Hello from a Windows 11 neural voice on .NET 8!");
+
+            Stream netStream = result.AsStreamForRead();
+            using var player = new SoundPlayer(netStream);
+
+            Console.WriteLine("Speaking...");
+            player.PlaySync();
+            Console.WriteLine("Done.");
+        }
+    }
+}
+
+
+---
+
+4. Build & Run
+
+Build the solution (Ctrl Shift B).
+
+Run with F5 or Ctrl F5.
+
+
+You should see the console output and hear “Hello from a Windows 11 neural voice on .NET 8!” spoken by your installed Aria (Neural) or equivalent.
+
+
+---
+
+This moves you off of unsupported .NET 6 and onto the current LTS release, while still using the modern WinRT TTS APIs in VS 2022.
+
 You don’t actually need the full Windows SDK on disk to get at the WinRT TTS types — Windows 11 ships the necessary WinMDs under %windir%\System32\WinMetadata. Here’s how to load and call the neural TTS engine purely from what’s already on your machine, with no SDK install at all:
 
 # 1) Make sure you’re in PowerShell 7+ (pwsh), not the old ISE/5.1:

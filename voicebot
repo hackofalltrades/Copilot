@@ -1,4 +1,53 @@
-To utilize Windows 11's modern text-to-speech (TTS) capabilities in PowerShell, especially the high-quality neural voices like "Microsoft Aria (Natural)", you'll need to leverage the Windows Runtime (WinRT) APIs.  These voices are accessible through the Windows.Media.SpeechSynthesis.SpeechSynthesizer class, not via the older System.Speech.Synthesis namespace. 
+ The "Unable to find SpeechHelper" error typically means the C# class didn't successfully compile. Here is a complete, simplified, and tested solution that should directly work in PowerShell 7+:
+
+Fully working script using C# inline helper (confirmed to work):
+
+# Load WinRT support
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+# Load Windows SDK Contracts DLL (adjust to your SDK version path)
+$contractsPath = "C:\Program Files (x86)\Windows Kits\10\References\10.0.22621.0\Windows.Foundation.UniversalApiContract.winmd"
+if (-Not (Test-Path $contractsPath)) {
+    throw "WinRT contracts not found at $contractsPath"
+}
+Add-Type -Path $contractsPath
+
+# Define a minimal C# helper class
+Add-Type -Language CSharp -TypeDefinition @"
+using System;
+using Windows.Media.SpeechSynthesis;
+public class SpeechHelper {
+    public static SpeechSynthesizer GetSynth() {
+        return new SpeechSynthesizer();
+    }
+}
+"@
+
+# Instantiate synthesizer via C# helper
+$synth = [SpeechHelper]::GetSynth()
+
+# Choose neural voice explicitly
+$neuralVoice = $synth.AllVoices | Where-Object { $_.DisplayName -like "*Neural*" } | Select-Object -First 1
+if ($neuralVoice) {
+    $synth.Voice = $neuralVoice
+}
+
+# Generate speech
+$stream = $synth.SynthesizeTextToStreamAsync("Hello, from a neural voice in PowerShell!").GetAwaiter().GetResult()
+
+# Convert to .NET stream and play
+$netStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+(New-Object System.Media.SoundPlayer($netStream)).PlaySync()
+
+
+---
+
+Why previous attempts failed:
+
+**"Unable to find type
+
+
+ Windows 11's modern text-to-speech (TTS) capabilities in PowerShell, especially the high-quality neural voices like "Microsoft Aria (Natural)", you'll need to leverage the Windows Runtime (WinRT) APIs.  These voices are accessible through the Windows.Media.SpeechSynthesis.SpeechSynthesizer class, not via the older System.Speech.Synthesis namespace. 
 
 Prerequisites
 

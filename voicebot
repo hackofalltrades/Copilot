@@ -1,0 +1,81 @@
+To utilize Windows 11's modern text-to-speech (TTS) capabilities in PowerShell, especially the high-quality neural voices like "Microsoft Aria (Natural)", you'll need to leverage the Windows Runtime (WinRT) APIs.  These voices are accessible through the Windows.Media.SpeechSynthesis.SpeechSynthesizer class, not via the older System.Speech.Synthesis namespace. 
+
+Prerequisites
+
+1. PowerShell 7 or higher: Required for compatibility with WinRT APIs. 
+
+
+2. Windows 11 with Neural Voices Installed: Ensure that neural voices are installed on your system. You can add them via:
+
+Settings > Accessibility > Narrator > Add natural voices 
+
+
+
+3. Windows SDK Installed: The necessary WinRT assemblies are typically included with Windows 11. However, if you encounter issues, installing the Windows 10/11 SDK can help. 
+
+
+
+PowerShell Script to Use Neural Voices
+
+Here's a PowerShell 7 script that lists available voices and speaks a sample text using a neural voice: 
+
+# Load the WinRT bridge assembly
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+
+# Define the SpeechSynthesizer class from WinRT
+Add-Type -TypeDefinition @"
+using System;
+using Windows.Media.SpeechSynthesis;
+
+public static class SpeechHelper
+{
+    public static SpeechSynthesizer GetSynthesizer()
+    {
+        return new SpeechSynthesizer();
+    }
+}
+"@ -Language CSharp
+
+# Instantiate the SpeechSynthesizer
+$synth = [SpeechHelper]::GetSynthesizer()
+
+# List all available voices
+$voices = $synth.AllVoices
+$voices | ForEach-Object { $_.DisplayName }
+
+# Select a neural voice (e.g., "Microsoft Aria (Natural)")
+$voice = $voices | Where-Object { $_.DisplayName -like "*Aria*" } | Select-Object -First 1
+if ($voice) {
+    $synth.Voice = $voice
+} else {
+    Write-Host "Desired voice not found. Using default voice."
+}
+
+# Synthesize the text to a stream
+$stream = $synth.SynthesizeTextToStreamAsync("Hello from PowerShell using a neural voice.").GetAwaiter().GetResult()
+
+# Convert the stream to a .NET stream
+$netStream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream)
+
+# Play the audio
+$player = New-Object System.Media.SoundPlayer $netStream
+$player.PlaySync()
+
+Notes:
+
+This script uses a C# helper class to instantiate the SpeechSynthesizer due to limitations in directly accessing WinRT classes from PowerShell. 
+
+Ensure that the desired neural voice (e.g., "Microsoft Aria (Natural)") is installed on your system. 
+
+The SynthesizeTextToStreamAsync method is asynchronous; hence, .GetAwaiter().GetResult() is used to synchronously wait for the result. 
+
+
+Additional Resources
+
+Microsoft Docs: SpeechSynthesizer Class
+
+Stack Overflow: Accessing Natural Voices in PowerShell
+
+
+If you encounter any issues or need further assistance with specific aspects of this implementation, feel free to ask!
+
